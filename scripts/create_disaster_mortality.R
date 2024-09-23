@@ -70,10 +70,9 @@ yourdata$ISO <- countrycode(yourdata$Country.Name,
                             destination = "iso3c")
 
 
-# Load the disaster data
 disaster <- read.csv(here("data", "original", "disaster.csv"), header = TRUE)
 
-# Clean and transform the disaster data
+
 disasters <- disaster |> 
   filter(Year >= 2000 & Year <= 2019) |> 
   filter(Disaster.Type %in% c("Earthquake", "Drought")) |> 
