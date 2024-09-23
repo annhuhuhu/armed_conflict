@@ -10,3 +10,7 @@ row_count <- merged_data %>%
 print(row_count)
 
 write.csv(merged_data, here("data", "final_analytical_data.csv"), row.names = FALSE)
+
+source(here("scripts", "create_disaster_mortality.R")) 
+
+source(here("scripts", "create_conflict.R"))
