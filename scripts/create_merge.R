@@ -1,16 +1,31 @@
 covariates <- read.csv(here("data", "original", "covariates.csv"), header = TRUE)
 
-merged_data <- armed_conflict %>%
-  inner_join(covariates, by = c("ISO", "year"))  # Join on ISO and year
-
-row_count <- merged_data %>%
-  group_by(ISO) %>%
-  summarize(row_count = n()) 
-
-print(row_count)
-
-write.csv(merged_data, here("data", "final_analytical_data.csv"), row.names = FALSE)
-
-source(here("scripts", "create_disaster_mortality.R")) 
-
+source(here("scripts", "create_disaster_mortality.R"))
 source(here("scripts", "create_conflict.R"))
+
+alllist <- list(confdata, wbdata, disasters)
+
+alllist |> reduce(full_join, by = c('ISO', 'year')) -> finaldata0
+
+finaldata <- covariates |>
+  left_join(finaldata0, by = c('ISO', 'year'))
+
+
+finaldata <- finaldata |>
+  mutate(armconf1 = replace_na(armconf1, 0),
+         drought = replace_na(drought, 0),
+         earthquake = replace_na(earthquake, 0),
+         totdeath = replace_na(totdeath, 0))
+
+write.csv(finaldata, file = here("data", "finaldata.csv"), row.names = FALSE)
+
+finaldata <- read.csv(here("data", "finaldata.csv"), header = TRUE)
+
+names(finaldata)
+
+finaldata %>%
+  dplyr::filter(country_name == "Canada")
+
+finaldata %>%
+  dplyr::filter(country_name == "Ecuador")
+
