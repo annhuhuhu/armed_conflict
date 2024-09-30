@@ -1,3 +1,14 @@
+library(tidyverse)
+library(here)
+library(kableExtra)
+library(table1)
+library(flextable)
+library(dplyr)
+library(purrr)
+library(readr)
+library(here)
+library(countrycode)
+
 covariates <- read.csv(here("data", "original", "covariates.csv"), header = TRUE)
 
 source(here("scripts", "create_disaster_mortality.R"))
