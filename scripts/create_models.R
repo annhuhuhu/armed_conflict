@@ -31,3 +31,4 @@ un5mor_model <- plm(update(preds, un5mor ~ .), data = final_data, index = c("ISO
 
 # Create a summary table
 stargazer(matmor_model, infmor_model, neomor_model, un5mor_model, type = "html", out = "mortality_models_summary.html")
+
