@@ -16,92 +16,100 @@ library(naniar)
 library(mice) 
 library(broom)   
 library(knitr)
+library(texreg)
 
-# 
+
+# Organize data 
 finaldata <- read.csv(here("data", "finaldata.csv"), header = TRUE)
 
-finaldata <- finaldata %>%
-  mutate(loggdp = log(gdp1000 + 1))
+finaldata <- finaldata |>
+  mutate(loggdp = log(gdp1000),
+         pctpopdens = popdens/100) |>
+  select(-popdens, -gdp1000)
+
+head(finaldata)
+
+midata <- finaldata |>
+  mutate(ISOnum = as.numeric(as.factor(finaldata$ISO))) |>
+  select(-country_name, -ISO, -region, -OECD2023)
 
 
-finaldata <- finaldata %>%
-  mutate(ISOnum = as.numeric(as.factor(ISO)))
+# Dry run 
+mice0  <- mice(midata, seed = 100, m = 5, maxit = 0, print = F)
 
-midata <- finaldata %>%
-  select(-country_name, -ISO, -region, -year)
-
-# Initial dry run to get method and predictor settings
-mice0 <- mice(midata, seed = 100, m = 5, maxit = 0)
-
-# Define methods for imputation
 meth <- mice0$method
-meth[c("urban", "male_edu", "temp", "rainfall1000", "matmor", "infmor", "neomor", "un5mor", "loggdp", "popdens")] <- "2l.lmer"
+meth[c("urban", "male_edu", "temp", "rainfall1000", "matmor", "infmor", 
+       "neomor", "un5mor", "loggdp", "pctpopdens")] <- "2l.lmer"
 
-# Define predictor matrix
 pred <- mice0$predictorMatrix
-pred[c("urban", "male_edu", "temp", "rainfall1000", "matmor", "infmor", "neomor", "un5mor", "loggdp", "popdens"), "ISOnum"] <- -2
-  
+pred[c("urban", "male_edu", "temp", "rainfall1000", "matmor", "infmor", 
+       "neomor", "un5mor", "loggdp", "pctpopdens"), "ISOnum"] <- -2
+
+
 # Perform MI
-mice.multi.out <- mice(midata, seed = 100, m = 10, maxit = 20, method = meth, predictorMatrix = pred)
+mice.multi.out  <- mice(midata, seed = 100, m = 10, maxit = 20,
+                        method = meth,
+                        predictorMatrix = pred)
+
 
 #Check for convergence
 plot(mice.multi.out)
 
-# Define the formula for the models
-preds <- as.formula(" ~ armconf1 + loggdp + popdens + urban + agedep + male_edu + temp + rainfall1000 + earthquake + drought")
 
-# Fit models using with()
-matmormod <- with(mice.multi.out, lm(update.formula(preds, matmor ~ .), data = finaldata))
-un5mormod <- with(mice.multi.out, lm(update.formula(preds, un5mor ~ .), data = finaldata))
-infmormod <- with(mice.multi.out, lm(update.formula(preds, infmor ~ .), data = finaldata))
-neomormod <- with(mice.multi.out, lm(update.formula(preds, neomor ~ .), data = finaldata)) 
+### MI analysis
 
-# Pool the results
-matmor_pool <- pool(matmormod)
-un5mor_pool <- pool(un5mormod)
-infmor_pool <- pool(infmormod)
-neomor_pool <- pool(neomormod)
+fit.mi.matmor <- with(mice.multi.out, 
+                      lm(matmor ~ -1 + armconf1 + loggdp + OECD + pctpopdens + urban + 
+                           agedep + male_edu + temp + rainfall1000 + earthquake + drought + 
+                           as.factor(ISOnum) + as.factor(year)))
+fit.mi.infmor <- with(mice.multi.out, 
+                      lm(infmor ~ -1 + armconf1 + loggdp + OECD + pctpopdens + urban + 
+                           agedep + male_edu + temp + rainfall1000 + earthquake + drought + 
+                           as.factor(ISOnum) + as.factor(year)))
+fit.mi.neomor <- with(mice.multi.out, 
+                      lm(neomor ~ -1 + armconf1 + loggdp + OECD + pctpopdens + urban + 
+                           agedep + male_edu + temp + rainfall1000 + earthquake + drought + 
+                           as.factor(ISOnum) + as.factor(year)))
+fit.mi.un5mor <- with(mice.multi.out, 
+                      lm(un5mor ~ -1 + armconf1 + loggdp + OECD + pctpopdens + urban + 
+                           agedep + male_edu + temp + rainfall1000 + earthquake + drought + 
+                           as.factor(ISOnum) + as.factor(year)))
 
-# Summary of pooled results
-summary(matmor_pool)
-summary(un5mor_pool)
-summary(infmor_pool)
-summary(neomor_pool)
-
-# Complete case analysis
-complete_data <- na.omit(finaldata)
-
-cc_matmor <- lm(update.formula(preds, matmor ~ .), data = complete_data)
-cc_un5mor <- lm(update.formula(preds, un5mor ~ .), data = complete_data)
-cc_infmor <- lm(update.formula(preds, infmor ~ .), data = complete_data)
-cc_neomor <- lm(update.formula(preds, neomor ~ .), data = complete_data)
-
-# Summary of complete case results
-summary(cc_matmor)
-summary(cc_un5mor)
-summary(cc_infmor)
-summary(cc_neomor)
-
-# Tidy the results
-tidy_matmor <- tidy(matmor_pool)
-tidy_un5mor <- tidy(un5mor_pool)
-tidy_infmor <- tidy(infmor_pool)
-tidy_neomor <- tidy(neomor_pool)
-
-tidy_cc_matmor <- tidy(cc_matmor)
-tidy_cc_un5mor <- tidy(cc_un5mor)
-tidy_cc_infmor <- tidy(cc_infmor)
-tidy_cc_neomor <- tidy(cc_neomor)
-
-# Combine results for comparison
-comparison_table <- data.frame(
-  Variable = tidy_matmor$term,
-  MI_Estimate = tidy_matmor$estimate,
-  CC_Estimate = tidy_cc_matmor$estimate
-  # Add other models similarly
-)
-
-# View the comparison table
-print(comparison_table)
+out.matmor <- pool(fit.mi.matmor)
+out.infmor <- pool(fit.mi.infmor)
+out.neomor<- pool(fit.mi.neomor)
+out.un5mor <- pool(fit.mi.un5mor)
 
 
+### CC analysis
+
+preds <- as.formula(" ~ -1 + armconf1 + loggdp + OECD + pctpopdens + urban + 
+                  agedep + male_edu + temp + rainfall1000 + earthquake + drought + 
+                  as.factor(ISO) + as.factor(year)")
+
+matmormod <- lm(update.formula(preds, matmor ~ .), data = finaldata)
+un5mormod <- lm(update.formula(preds, un5mor ~ .), data = finaldata)
+infmormod <- lm(update.formula(preds, infmor ~ .), data = finaldata)
+neomormod <- lm(update.formula(preds, neomor ~ .), data = finaldata)
+
+
+tosave <- list(out.matmor, out.infmor, out.neomor, out.un5mor, 
+               matmormod, un5mormod, infmormod, neomormod)
+
+keepvars <- list("armconf1" = "Armed conflict",
+                 "loggdp" = "log(GDP)",
+                 "OECD" = "OECD",
+                 "pctpopdens" = "Population density",
+                 "urban" = "Urban",
+                 "agedep" = "Age dependency",
+                 "male_edu" = "Male education",
+                 "temp" = "Average temperature",
+                 "rainfall" = "Average rainfall",
+                 "earthquake" = "Earthquake",
+                 "drought" = "Drought")
+screenreg(tosave, 
+          ci.force = TRUE,
+          custom.coef.map = keepvars,
+          custom.model.names = c("Mat CC", "Mat MI", "Un5 CC", "Un5 MI", "Inf CC", "Inf MI", "Neo CC", "Neo MI"))
+
+save(tosave, file = here("output", "mi_output.Rdata"))
